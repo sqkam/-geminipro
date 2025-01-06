@@ -76,7 +76,7 @@ var rootCmd = &cobra.Command{
 					if err == nil {
 						for _, ca := range v.Candidates {
 							for _, cc := range ca.Content.Parts {
-								fmt.Printf("%v\n", cc.Text)
+								// fmt.Printf("%v\n", cc.Text)
 								_, err := w.Write([]byte(cc.Text))
 								c.Writer.Flush()
 								if err != nil {
