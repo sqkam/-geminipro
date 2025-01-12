@@ -60,6 +60,14 @@ var rootCmd = &cobra.Command{
 			return
 		}
 		s := gin.Default()
+		s.GET("/callback", func(c *gin.Context) {
+			fmt.Printf("%v\n", c)
+			b := make([]byte, 1024)
+			_ = b
+			// c.String(http.StatusOK,"%s", )
+			fmt.Printf("%v\n", len(b))
+			c.JSON(http.StatusOK, string(b))
+		})
 
 		s.POST("/api/generate", func(c *gin.Context) {
 			req := struct {
@@ -94,7 +102,56 @@ var rootCmd = &cobra.Command{
 					}
 				}
 				return false
-				// return true
+			})
+		})
+
+		s.POST("/openai/generate", func(c *gin.Context) {
+			type content struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			}
+			req := struct {
+				Message []*content `json:"messages"`
+			}{}
+			err := c.ShouldBindJSON(&req)
+			if err != nil {
+				c.AbortWithError(http.StatusBadRequest, err)
+				return
+			}
+			geminiReq := make([]*genai.Content, 0, len(req.Message))
+			for _, v := range req.Message {
+				geminiReq = append(geminiReq, &genai.Content{
+					Role: v.Role,
+					Parts: []*genai.Part{
+						{
+							Text: v.Content,
+						},
+					},
+				})
+			}
+			c.Stream(func(w io.Writer) bool {
+				for v, err := range client.Models.GenerateContentStream(c, model, geminiReq, nil) {
+					if err == nil {
+						for _, ca := range v.Candidates {
+							for _, cc := range ca.Content.Parts {
+								// fmt.Printf("%v\n", cc.Text)
+								_, err := w.Write([]byte(cc.Text))
+								c.Writer.Flush()
+								if err != nil {
+									return false
+								}
+							}
+						}
+						if v.UsageMetadata.TotalTokenCount > 0 {
+							return false
+						}
+					} else {
+						w.Write([]byte(err.Error()))
+						c.Writer.Flush()
+						return false
+					}
+				}
+				return false
 			})
 		})
 		s.Run(fmt.Sprintf(":%d", port))
